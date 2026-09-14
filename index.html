@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cayden's Box Score Query & Filter Lab</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --card-hover: #fef2f2;
+      --accent: #dc2626;
+      --accent-hover: #b91c1c;
+      --green: #16a34a;
+      --red: #dc2626;
+      --blue: #0284c7;
+      --gold: #d97706;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --header-bg: #fee2e2;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 16px; }
+    .container { max-width: 1600px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+    h1 { font-size: 1.45rem; font-weight: 800; color: var(--accent); }
+    .badge { font-size: 0.75rem; padding: 5px 12px; border-radius: 6px; background: var(--card); border: 1px solid var(--border); color: var(--muted); font-weight: 600; }
+
+    .btn { background: var(--accent); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 0.8rem; transition: background 0.15s; }
+    .btn:hover { background: var(--accent-hover); }
+    .btn-outline { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { background: #f1f5f9; }
+    .btn-danger { background: #fee2e2; color: var(--red); border: 1px solid #fca5a5; }
+    .btn-danger:hover { background: var(--red); color: #fff; }
+
+    /* Panels */
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .panel-title { font-size: 0.95rem; font-weight: 800; color: var(--text); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+    /* Filter Rules Builder */
+    .filter-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+    .filter-row select, .filter-row input {
+      background: #f8fafc; border: 1px solid var(--border); color: var(--text); padding: 7px 10px; border-radius: 5px; font-size: 0.82rem; outline: none;
+    }
+    .filter-row select:focus, .filter-row input:focus { border-color: var(--accent); background: #fff; }
+    .remove-rule-btn { background: none; border: none; color: var(--red); font-size: 1.1rem; cursor: pointer; font-weight: bold; padding: 0 4px; }
+    .builder-controls { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+
+    /* Summary Bar */
+    .stats-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); gap: 8px; margin-bottom: 18px; }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 6px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .stat-card .val { font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 2px; }
+    .stat-card .label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
+
+    /* Table */
+    .table-box { background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    table { width: 100%; border-collapse: collapse; text-align: center; font-size: 0.78rem; white-space: nowrap; }
+    th { background: var(--header-bg); color: #991b1b; padding: 10px 8px; font-weight: 700; border-bottom: 1px solid #fecaca; cursor: pointer; user-select: none; }
+    th:hover { background: #fecaca; }
+    th .sort-arrow { font-size: 0.65rem; margin-left: 2px; }
+    td { padding: 8px; border-bottom: 1px solid var(--border); }
+    tr:hover { background: var(--card-hover); }
+    .highlight { color: var(--accent); font-weight: 800; }
+    .green { color: var(--green); font-weight: 800; }
+    .blue { color: var(--blue); font-weight: 800; }
+    .empty-state { padding: 32px; color: var(--muted); text-align: center; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Cayden's Box Score Query & Filter Lab</h1>
+        <p style="color: var(--muted); font-size: 0.8rem; margin-top: 2px;">Multi-Condition Stat Search • Custom Filters & Splits</p>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span class="badge" id="sync-status">Connecting to Drive...</span>
+        <button onclick="fetchLatestData()" class="btn btn-outline">🔄 Refresh Drive</button>
+      </div>
+    </header>
+
+    <!-- Query Builder Panel -->
+    <div class="panel">
+      <div class="panel-title">
+        <span>🔍 Search & Filter Engine</span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <label style="font-size: 0.75rem; color: var(--muted); font-weight: 700;">SEASON:</label>
+          <select id="season-selector" onchange="runQuery()" style="background:#f8fafc; border:1px solid var(--border); padding:6px 10px; border-radius:5px; font-size:0.8rem; font-weight:700;">
+            <option value="ALL">All Seasons Combined</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="filter-rules-container"></div>
+
+      <div class="builder-controls">
+        <button class="btn btn-outline" onclick="addRule()">➕ Add Condition</button>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; color: var(--muted); margin-left: 8px;">
+          <span>MATCH:</span>
+          <select id="logic-gate" onchange="runQuery()" style="background:#f8fafc; border:1px solid var(--border); padding:5px 8px; border-radius:4px; font-weight:700;">
+            <option value="AND">ALL Rules (AND)</option>
+            <option value="OR">ANY Rule (OR)</option>
+          </select>
+        </div>
+        <button class="btn btn-danger" onclick="resetRules()" style="margin-left: auto;">Reset Filters</button>
+      </div>
+    </div>
+
+    <!-- Filtered Results Summary Bar -->
+    <div class="stats-summary" id="stats-summary"></div>
+
+    <!-- Filtered Games Table -->
+    <div class="table-box">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortTable('seasonName')">Season <span class="sort-arrow" id="s-seasonName"></span></th>
+            <th onclick="sortTable('date')">Date <span class="sort-arrow" id="s-date"></span></th>
+            <th onclick="sortTable('opponent')">Opponent <span class="sort-arrow" id="s-opponent"></span></th>
+            <th onclick="sortTable('result')">W/L <span class="sort-arrow" id="s-result"></span></th>
+            <th onclick="sortTable('score')">Score <span class="sort-arrow" id="s-score"></span></th>
+            <th onclick="sortTable('min')">MIN <span class="sort-arrow" id="s-min"></span></th>
+            <th onclick="sortTable('pts')">PTS <span class="sort-arrow" id="s-pts"></span></th>
+            <th onclick="sortTable('reb')">REB <span class="sort-arrow" id="s-reb"></span></th>
+            <th onclick="sortTable('ast')">AST <span class="sort-arrow" id="s-ast"></span></th>
+            <th onclick="sortTable('stl')">STL <span class="sort-arrow" id="s-stl"></span></th>
+            <th onclick="sortTable('fto')">FTO <span class="sort-arrow" id="s-fto"></span></th>
+            <th onclick="sortTable('fouls')">Fouls <span class="sort-arrow" id="s-fouls"></span></th>
+            <th onclick="sortTable('drnFls')">Drn Fls <span class="sort-arrow" id="s-drnFls"></span></th>
+            <th onclick="sortTable('twoPm')">2PM-A <span class="sort-arrow" id="s-twoPm"></span></th>
+            <th onclick="sortTable('threePm')">3PM-A <span class="sort-arrow" id="s-threePm"></span></th>
+            <th onclick="sortTable('ftm')">FTM-A <span class="sort-arrow" id="s-ftm"></span></th>
+            <th onclick="sortTable('fgPct')">FG% <span class="sort-arrow" id="s-fgPct"></span></th>
+            <th onclick="sortTable('trueShots')">True Shots <span class="sort-arrow" id="s-trueShots"></span></th>
+            <th onclick="sortTable('plusMinus')">+/- <span class="sort-arrow" id="s-plusMinus"></span></th>
+          </tr>
+        </thead>
+        <tbody id="games-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwEyDw-vBWfWVNi3LoFnDdUYkS341YWqAzVNCSC2ghmOrJ-dxXInMgs982BRwLh1oi-qQ/exec";
+
+    let state = { seasons: [] };
+    let currentFilteredGames = [];
+    let sortColumn = 'date';
+    let sortAsc = false;
+
+    // Available categories to filter on
+    const CATEGORIES = [
+      { id: 'pts', label: 'Points (PTS)', type: 'num' },
+      { id: 'result', label: 'Result (W / L)', type: 'str' },
+      { id: 'trueShots', label: 'True Shots', type: 'num' },
+      { id: 'plusMinus', label: '+/- Differential', type: 'num' },
+      { id: 'min', label: 'Minutes Played (MIN)', type: 'num' },
+      { id: 'reb', label: 'Rebounds (REB)', type: 'num' },
+      { id: 'ast', label: 'Assists (AST)', type: 'num' },
+      { id: 'stl', label: 'Steals (STL)', type: 'num' },
+      { id: 'fto', label: 'Forced TO (FTO)', type: 'num' },
+      { id: 'fouls', label: 'Personal Fouls', type: 'num' },
+      { id: 'drnFls', label: 'Drawn Fouls', type: 'num' },
+      { id: 'twoPm', label: '2PT Made (2PM)', type: 'num' },
+      { id: 'twoPa', label: '2PT Attempted (2PA)', type: 'num' },
+      { id: 'twoPct', label: '2PT Percentage (0-100%)', type: 'num' },
+      { id: 'threePm', label: '3PT Made (3PM)', type: 'num' },
+      { id: 'threePa', label: '3PT Attempted (3PA)', type: 'num' },
+      { id: 'threePct', label: '3PT Percentage (0-100%)', type: 'num' },
+      { id: 'ftm', label: 'FT Made (FTM)', type: 'num' },
+      { id: 'fta', label: 'FT Attempted (FTA)', type: 'num' },
+      { id: 'ftPct', label: 'FT Percentage (0-100%)', type: 'num' },
+      { id: 'fgPct', label: 'FG Percentage (0-100%)', type: 'num' }
+    ];
+
+    let rules = [
+      { cat: 'pts', op: '>=', val: '10' }
+    ];
+
+    async function fetchLatestData() {
+      setStatus("Syncing with Google Drive...");
+      try {
+        const res = await fetch(GOOGLE_SCRIPT_URL);
+        const data = await res.json();
+        if (data && Array.isArray(data.seasons)) {
+          state = data;
+          localStorage.setItem('cayden_games_data', JSON.stringify(state));
+          setStatus("Synced with Drive");
+        } else {
+          fallbackLocal("Synced (Empty)");
+        }
+      } catch (err) {
+        fallbackLocal("Offline Mode");
+      }
+      populateSeasonDropdown();
+      renderRuleBuilder();
+      runQuery();
+    }
+
+    function fallbackLocal(msg) {
+      const local = localStorage.getItem('cayden_games_data');
+      if (local) {
+        try { state = JSON.parse(local); } catch(e){}
+      }
+      setStatus(msg);
+    }
+
+    function setStatus(msg) {
+      document.getElementById('sync-status').textContent = msg;
+    }
+
+    function populateSeasonDropdown() {
+      const select = document.getElementById('season-selector');
+      select.innerHTML = '<option value="ALL">All Seasons Combined</option>';
+      (state.seasons || []).forEach((s, idx) => {
+        const opt = document.createElement('option');
+        opt.value = idx;
+        opt.textContent = s.seasonName;
+        select.appendChild(opt);
+      });
+    }
+
+    function renderRuleBuilder() {
+      const container = document.getElementById('filter-rules-container');
+      container.innerHTML = '';
+
+      if (rules.length === 0) {
+        container.innerHTML = '<div style="font-size:0.75rem; color:var(--muted); margin-bottom:8px;">No filters active. Showing all games.</div>';
+        return;
+      }
+
+      rules.forEach((rule, idx) => {
+        const catObj = CATEGORIES.find(c => c.id === rule.cat) || CATEGORIES[0];
+        const row = document.createElement('div');
+        row.className = 'filter-row';
+
+        let catOptions = CATEGORIES.map(c => `<option value="${c.id}" ${c.id === rule.cat ? 'selected' : ''}>${c.label}</option>`).join('');
+
+        let opOptions = '';
+        if (catObj.type === 'str') {
+          opOptions = `
+            <option value="==" ${rule.op === '==' ? 'selected' : ''}>Equals (==)</option>
+            <option value="!=" ${rule.op === '!=' ? 'selected' : ''}>Does Not Equal (!=)</option>
+          `;
+        } else {
+          opOptions = `
+            <option value=">=" ${rule.op === '>=' ? 'selected' : ''}>Greater Than or Equal (>=)</option>
+            <option value="<=" ${rule.op === '<=' ? 'selected' : ''}>Less Than or Equal (<=)</option>
+            <option value="==" ${rule.op === '==' ? 'selected' : ''}>Equals (==)</option>
+            <option value=">" ${rule.op === '>' ? 'selected' : ''}>Strictly Greater (>)</option>
+            <option value="<" ${rule.op === '<' ? 'selected' : ''}>Strictly Less (<)</option>
+          `;
+        }
+
+        let valInput = '';
+        if (rule.cat === 'result') {
+          valInput = `
+            <select onchange="updateRule(${idx}, 'val', this.value)">
+              <option value="W" ${rule.val === 'W' ? 'selected' : ''}>Win (W)</option>
+              <option value="L" ${rule.val === 'L' ? 'selected' : ''}>Loss (L)</option>
+            </select>
+          `;
+        } else {
+          valInput = `<input type="number" step="any" placeholder="Value" value="${rule.val}" oninput="updateRule(${idx}, 'val', this.value)" style="width:110px;" />`;
+        }
+
+        row.innerHTML = `
+          <span style="font-size:0.75rem; font-weight:700; color:var(--muted); min-width:60px;">Rule #${idx + 1}:</span>
+          <select onchange="changeRuleCategory(${idx}, this.value)">${catOptions}</select>
+          <select onchange="updateRule(${idx}, 'op', this.value)">${opOptions}</select>
+          ${valInput}
+          <button class="remove-rule-btn" onclick="removeRule(${idx})" title="Remove Rule">✕</button>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function addRule() {
+      rules.push({ cat: 'pts', op: '>=', val: '10' });
+      renderRuleBuilder();
+      runQuery();
+    }
+
+    function removeRule(idx) {
+      rules.splice(idx, 1);
+      renderRuleBuilder();
+      runQuery();
+    }
+
+    function resetRules() {
+      rules = [];
+      renderRuleBuilder();
+      runQuery();
+    }
+
+    function changeRuleCategory(idx, newCat) {
+      rules[idx].cat = newCat;
+      const catObj = CATEGORIES.find(c => c.id === newCat);
+      if (catObj.type === 'str') {
+        rules[idx].op = '==';
+        rules[idx].val = 'W';
+      } else {
+        rules[idx].op = '>=';
+        rules[idx].val = '0';
+      }
+      renderRuleBuilder();
+      runQuery();
+    }
+
+    function updateRule(idx, field, val) {
+      rules[idx][field] = val;
+      runQuery();
+    }
+
+    // Extraction & Normalized Metrics
+    function getNormalizedGame(g, seasonName) {
+      const pts = Number(g.pts) || 0;
+      const reb = Number(g.reb) || 0;
+      const ast = Number(g.ast) || 0;
+      const stl = Number(g.stls !== undefined ? g.stls : (g.stl || 0));
+      const fto = Number(g.fto) || 0;
+      const fouls = Number(g.fouls) || 0;
+      const drnFls = Number(g.drnFls !== undefined ? g.drnFls : (g.drawnFouls || 0));
+      const twoPm = Number(g.twoPm) || 0;
+      const twoPa = Number(g.twoPa) || 0;
+      const threePm = Number(g.threePm) || 0;
+      const threePa = Number(g.threePa) || 0;
+      const ftm = Number(g.ftm) || 0;
+      const fta = Number(g.fta) || 0;
+      const sfd = Number(g.shootingFoulsDrawn) || 0;
+      const trueShots = g.trueShots !== undefined ? Number(g.trueShots) : (twoPa + threePa + sfd);
+
+      let plusMinus = 0;
+      if (g.plusMinus !== undefined && g.plusMinus !== null && g.plusMinus !== '') {
+        plusMinus = parseFloat(String(g.plusMinus).replace('+', '')) || 0;
+      }
+
+      const fgm = twoPm + threePm;
+      const fga = twoPa + threePa;
+      const fgPct = fga > 0 ? (fgm / fga) * 100 : 0;
+      const twoPct = twoPa > 0 ? (twoPm / twoPa) * 100 : 0;
+      const threePct = threePa > 0 ? (threePm / threePa) * 100 : 0;
+      const ftPct = fta > 0 ? (ftm / fta) * 100 : 0;
+
+      return {
+        seasonName: seasonName || '-',
+        date: g.date || '-',
+        opponent: g.opponent || '-',
+        result: (g.result || 'W').toUpperCase(),
+        score: g.score || '-',
+        min: Number(g.min) || 0,
+        pts, reb, ast, stl, fto, fouls, drnFls,
+        twoPm, twoPa, twoPct,
+        threePm, threePa, threePct,
+        ftm, fta, ftPct,
+        fgm, fga, fgPct,
+        trueShots,
+        plusMinus
+      };
+    }
+
+    function runQuery() {
+      const seasonVal = document.getElementById('season-selector').value;
+      const logic = document.getElementById('logic-gate').value; // 'AND' or 'OR'
+
+      let allGames = [];
+      if (seasonVal === 'ALL') {
+        (state.seasons || []).forEach(s => {
+          (s.games || []).forEach(g => {
+            allGames.push(getNormalizedGame(g, s.seasonName));
+          });
+        });
+      } else {
+        const s = state.seasons[parseInt(seasonVal)];
+        if (s) {
+          (s.games || []).forEach(g => {
+            allGames.push(getNormalizedGame(g, s.seasonName));
+          });
+        }
+      }
+
+      // Filter against rules
+      currentFilteredGames = allGames.filter(g => {
+        if (rules.length === 0) return true;
+
+        if (logic === 'AND') {
+          return rules.every(r => testRule(g, r));
+        } else {
+          return rules.some(r => testRule(g, r));
+        }
+      });
+
+      applySorting();
+      renderSummaryCards();
+      renderTable();
+    }
+
+    function testRule(game, rule) {
+      const catVal = game[rule.cat];
+      const targetVal = rule.cat === 'result' ? rule.val.toUpperCase() : parseFloat(rule.val);
+
+      if (rule.cat === 'result') {
+        if (rule.op === '==') return String(catVal).toUpperCase() === targetVal;
+        if (rule.op === '!=') return String(catVal).toUpperCase() !== targetVal;
+        return true;
+      }
+
+      if (isNaN(targetVal)) return true;
+
+      switch (rule.op) {
+        case '>=': return catVal >= targetVal;
+        case '<=': return catVal <= targetVal;
+        case '==': return Math.abs(catVal - targetVal) < 0.001;
+        case '>': return catVal > targetVal;
+        case '<': return catVal < targetVal;
+        default: return true;
+      }
+    }
+
+    function sortTable(col) {
+      if (sortColumn === col) {
+        sortAsc = !sortAsc;
+      } else {
+        sortColumn = col;
+        sortAsc = false;
+      }
+      applySorting();
+      renderTable();
+    }
+
+    function applySorting() {
+      currentFilteredGames.sort((a, b) => {
+        let valA = a[sortColumn];
+        let valB = b[sortColumn];
+
+        if (typeof valA === 'string') {
+          const res = valA.localeCompare(valB);
+          return sortAsc ? res : -res;
+        }
+        return sortAsc ? valA - valB : valB - valA;
+      });
+
+      // Update arrow icons
+      document.querySelectorAll('.sort-arrow').forEach(el => el.textContent = '');
+      const activeEl = document.getElementById(`s-${sortColumn}`);
+      if (activeEl) {
+        activeEl.textContent = sortAsc ? '▲' : '▼';
+      }
+    }
+
+    function renderSummaryCards() {
+      const n = currentFilteredGames.length;
+      if (n === 0) {
+        document.getElementById('stats-summary').innerHTML = `
+          <div class="stat-card" style="grid-column: 1 / -1;"><div class="label">Query Result</div><div class="val" style="color:var(--red);">0 Matches Found</div></div>
+        `;
+        return;
+      }
+
+      let totals = {
+        wins: 0, pts: 0, reb: 0, ast: 0, stl: 0, fto: 0, fouls: 0, drnFls: 0,
+        trueShots: 0, plusMinus: 0, fgm: 0, fga: 0, twoPm: 0, twoPa: 0,
+        threePm: 0, threePa: 0, ftm: 0, fta: 0, min: 0
+      };
+
+      currentFilteredGames.forEach(g => {
+        if (g.result === 'W') totals.wins++;
+        totals.pts += g.pts;
+        totals.reb += g.reb;
+        totals.ast += g.ast;
+        totals.stl += g.stl;
+        totals.fto += g.fto;
+        totals.fouls += g.fouls;
+        totals.drnFls += g.drnFls;
+        totals.trueShots += g.trueShots;
+        totals.plusMinus += g.plusMinus;
+        totals.twoPm += g.twoPm;
+        totals.twoPa += g.twoPa;
+        totals.threePm += g.threePm;
+        totals.threePa += g.threePa;
+        totals.ftm += g.ftm;
+        totals.fta += g.fta;
+        totals.fgm += g.fgm;
+        totals.fga += g.fga;
+        totals.min += g.min;
+      });
+
+      const ppg = (totals.pts / n).toFixed(1);
+      const rpg = (totals.reb / n).toFixed(1);
+      const apg = (totals.ast / n).toFixed(1);
+      const spg = (totals.stl / n).toFixed(1);
+      const tsPerG = (totals.trueShots / n).toFixed(1);
+      const avgPm = (totals.plusMinus / n);
+      const pmStr = (avgPm > 0 ? '+' : '') + avgPm.toFixed(1);
+
+      const fgPct = totals.fga > 0 ? ((totals.fgm / totals.fga) * 100).toFixed(1) + '%' : '0.0%';
+      const twoPct = totals.twoPa > 0 ? ((totals.twoPm / totals.twoPa) * 100).toFixed(1) + '%' : '0.0%';
+      const threePct = totals.threePa > 0 ? ((totals.threePm / totals.threePa) * 100).toFixed(1) + '%' : '0.0%';
+      const ftPct = totals.fta > 0 ? ((totals.ftm / totals.fta) * 100).toFixed(1) + '%' : '0.0%';
+
+      document.getElementById('stats-summary').innerHTML = `
+        <div class="stat-card"><div class="label">Games Matched</div><div class="val" style="color:var(--accent);">${n}</div></div>
+        <div class="stat-card"><div class="label">Record</div><div class="val">${totals.wins}-${n - totals.wins}</div></div>
+        <div class="stat-card"><div class="label">PPG</div><div class="val" style="color:var(--accent);">${ppg}</div></div>
+        <div class="stat-card"><div class="label">RPG</div><div class="val">${rpg}</div></div>
+        <div class="stat-card"><div class="label">APG</div><div class="val">${apg}</div></div>
+        <div class="stat-card"><div class="label">SPG</div><div class="val" style="color:var(--blue);">${spg}</div></div>
+        <div class="stat-card"><div class="label">True Shots/G</div><div class="val" style="color:var(--accent);">${tsPerG}</div></div>
+        <div class="stat-card"><div class="label">Avg +/-</div><div class="val" style="color:${avgPm >= 0 ? 'var(--green)' : 'var(--red)'};">${pmStr}</div></div>
+        <div class="stat-card"><div class="label">FG%</div><div class="val">${fgPct}</div></div>
+        <div class="stat-card"><div class="label">2PT%</div><div class="val">${twoPct}</div></div>
+        <div class="stat-card"><div class="label">3PT%</div><div class="val">${threePct}</div></div>
+        <div class="stat-card"><div class="label">FT%</div><div class="val" style="color:var(--green);">${ftPct}</div></div>
+      `;
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('games-body');
+      tbody.innerHTML = '';
+
+      if (currentFilteredGames.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="19" class="empty-state">No box scores match your current filter conditions.</td></tr>`;
+        return;
+      }
+
+      currentFilteredGames.forEach(g => {
+        const pmFormatted = g.plusMinus > 0 ? `+${g.plusMinus}` : `${g.plusMinus}`;
+        const fgStr = g.fga > 0 ? `${g.fgPct.toFixed(1)}%` : '-';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="font-weight:700; color:var(--muted);">${g.seasonName}</td>
+          <td>${g.date}</td>
+          <td style="font-weight:700;">${g.opponent}</td>
+          <td style="color:${g.result === 'W' ? 'var(--green)' : 'var(--red)'}; font-weight:800;">${g.result}</td>
+          <td>${g.score}</td>
+          <td>${g.min}</td>
+          <td class="highlight">${g.pts}</td>
+          <td>${g.reb}</td>
+          <td>${g.ast}</td>
+          <td>${g.stl}</td>
+          <td>${g.fto}</td>
+          <td>${g.fouls}</td>
+          <td>${g.drnFls}</td>
+          <td>${g.twoPm}/${g.twoPa}</td>
+          <td>${g.threePm}/${g.threePa}</td>
+          <td>${g.ftm}/${g.fta}</td>
+          <td style="font-weight:700;">${fgStr}</td>
+          <td class="green">${g.trueShots}</td>
+          <td style="font-weight:700; color:${g.plusMinus >= 0 ? 'var(--green)' : 'var(--red)'};">${pmFormatted}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    fetchLatestData();
+  </script>
+</body>
+</html>
